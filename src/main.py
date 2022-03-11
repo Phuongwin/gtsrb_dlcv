@@ -10,6 +10,8 @@ import csv
 import torch.nn as nn
 import torch.optim as optim
 
+from preprocessing import *
+from visualize import *
 from models.basic_cnn import Net
 
 def split_dataset(dataset: torchvision.datasets.folder.ImageFolder, train_size: float):
@@ -43,25 +45,37 @@ if __name__ == "__main__":
 
     dataset = datasets.ImageFolder('./data/Final_Training/Images', transform = transform)
 
-    train_set, val_set, test_set = split_dataset(dataset, train_set_allocation)
+    view_data_distribution(dataset, "data_distribution")     # From visualize.py
 
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size = batch_size,
-                                               num_workers = 2,
-                                               drop_last = True,
-                                               shuffle = True
-                                              )
+    balanced_dataset = handle_imbalances(dataset)    # From preprocessing.py
 
-    val_loader = torch.utils.data.DataLoader(val_set, batch_size = batch_size,
-                                             num_workers = 2,
-                                             drop_last = True,
-                                             shuffle = True
-                                            )
+    view_data_distribution(balanced_dataset, "balanced_distribution")
 
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size = batch_size,
-                                             num_workers = 2,
-                                             drop_last = True,
-                                             shuffle = True
-                                            )
+    # train_set, val_set, test_set = split_dataset(dataset, train_set_allocation)
+
+
+
+
+
+    ### Load data into DataLoaders
+
+    # train_loader = torch.utils.data.DataLoader(train_set, batch_size = batch_size,
+    #                                            num_workers = 2,
+    #                                            drop_last = True,
+    #                                            shuffle = True
+    #                                           )
+
+    # val_loader = torch.utils.data.DataLoader(val_set, batch_size = batch_size,
+    #                                          num_workers = 2,
+    #                                          drop_last = True,
+    #                                          shuffle = True
+    #                                         )
+
+    # test_loader = torch.utils.data.DataLoader(test_set, batch_size = batch_size,
+    #                                          num_workers = 2,
+    #                                          drop_last = True,
+    #                                          shuffle = True
+    #                                         )
     # transform = transforms.Compose([
     #     transforms.Resize(256),
     #     transforms.CenterCrop(224),
@@ -70,51 +84,51 @@ if __name__ == "__main__":
     #     ])
 
 
-    net = Net()
+    # net = Net()
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(net.parameters(),
-                          lr=0.001,
-                          momentum=0.9)
+    # criterion = nn.CrossEntropyLoss()
+    # optimizer = optim.SGD(net.parameters(),
+    #                       lr=0.001,
+    #                       momentum=0.9)
     
-    loss_plot = []
+    # loss_plot = []
 
-    for epoch in range(2):
-        print("training round ", epoch)
+    # for epoch in range(2):
+    #     print("training round ", epoch)
 
-        running_loss = 0.0
-        correct = 0
-        total = 0
+    #     running_loss = 0.0
+    #     correct = 0
+    #     total = 0
 
-        for i, data in enumerate(train_loader, 0):
-            inputs, labels = data
+    #     for i, data in enumerate(train_loader, 0):
+    #         inputs, labels = data
 
-            optimizer.zero_grad()
+    #         optimizer.zero_grad()
 
-            outputs = net(inputs)
+    #         outputs = net(inputs)
 
-            _, predicted = torch.max(outputs.data, 1)
-            loss = criterion(outputs, labels)
-            loss_plot.append(loss)
+    #         _, predicted = torch.max(outputs.data, 1)
+    #         loss = criterion(outputs, labels)
+    #         loss_plot.append(loss)
 
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-            loss.backward()
-            optimizer.step()
+    #         total += labels.size(0)
+    #         correct += (predicted == labels).sum().item()
+    #         loss.backward()
+    #         optimizer.step()
 
-            running_loss += loss.item()
+    #         running_loss += loss.item()
 
-            if i % 200 == 199:
-                print('[%d, %5d] loss: %.3f accuracy: %.3f' %
-                  (epoch + 1, i + 1, running_loss / 200,100 * correct / total ))
+    #         if i % 200 == 199:
+    #             print('[%d, %5d] loss: %.3f accuracy: %.3f' %
+    #               (epoch + 1, i + 1, running_loss / 200,100 * correct / total ))
 
-                running_loss = 0.0
+    #             running_loss = 0.0
 
 
-    print('Finished Training')
-    plt.plot(range(len(loss_plot)),loss_plot, 'r+')
-    plt.title("Loss")
-    plt.show()
+    # print('Finished Training')
+    # plt.plot(range(len(loss_plot)),loss_plot, 'r+')
+    # plt.title("Loss")
+    # plt.show()
 
     # print(net)
     # https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html

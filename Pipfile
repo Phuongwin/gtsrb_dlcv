@@ -12,6 +12,7 @@ torchvision = "*"
 matplotlib = "*"
 albumentations = "*"
 pandas = "*"
+seaborn = "*"
 
 [requires]
 python_version = "3.9"

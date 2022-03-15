@@ -1,177 +1,228 @@
-import argparse
+# Generic Python Libraries
+import yaml
 import time
-import matplotlib.pyplot as plt
 
 # Machine Learning Libraries
-import torch
-import torchvision
-from torchvision import datasets, transforms
-
 import torch.nn as nn
 import torch.optim as optim
+from torchvision import datasets, transforms
 
 # Other .py files to be used
 from preprocessing import *
 from visualize import *
 from models.basic_cnn import Net
-
-def split_dataset(dataset: torchvision.datasets.folder.ImageFolder, train_percentage: float):
-    if train_percentage > 1.0:
-        raise Exception("Sizes do not equate to 1.0")
-    
-    dataset_size = dataset.__len__()
-
-    train_count = int(dataset_size * train_percentage)
-    test_count = dataset_size - train_count
-
-
-    train_set, test_set = torch.utils.data.random_split(dataset, [train_count, test_count])
-    print(train_set.__len__(), test_set.__len__())
-    print(f"Confirming total: {train_set.__len__() + test_set.__len__()}")
-
-    return train_set, test_set
-
+from transform import *
 if __name__ == "__main__":
-    # parser = argparse.ArgumentParser(description='GTSRB Classification - JHU DL for CV')
-
-    # parser.add_argument('--batch-size', type=int, default=32, metavar='N',
-    #                     help="input batch size for training (default: 32)")
+    ### Read Configuration and Hyperparameters from config.yaml
+    with open('./config.yaml') as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
     
-    ### Define Hyperparameters to be used within command line arguments
-    batch_size = 32
-    train_set_allocation = 0.9
+    print(config)
 
-    PATH = './saved_models/custom_network.pth'
+    # Configurations
+    train = config['training']
+    inference = config['inference']
+    handle_imbalances = config['imbalances']
+    dataset_root = config['dataset_path']
+    save_path = config['save_path']
+    PATH = config['weight_path']
 
-    transform = transforms.Compose([transforms.Resize((32, 32)),
-                                    transforms.RandomHorizontalFlip(),
-                                    transforms.ToTensor(),
-                                    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                         std=[0.229, 0.224, 0.225])
-                                  ])
+    # Hyperparameters
+    train_set_allocation = config['train_allocation']
+    batch_size = config['batch_size']
+    n_epoch = config['epoch']
+    learning_rate = config['learning_rate']
+    momentum = config['momentum']
 
-    ### Loading the GTSRB dataset
-    dataset = datasets.ImageFolder('./data/Final_Training/Images', transform = transform)
+    # Hardware for Training
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
 
-    train_set, test_set = split_dataset(dataset, train_set_allocation)
+    '''
+    Loading the GTSRB dataset
+    '''
+    dataset = datasets.ImageFolder(dataset_root)   
+    train_set, valid_set, test_set = split_dataset(dataset, train_set_allocation) # From preprocessing.py
 
     view_data_distribution(dataset, "data_distribution")     # From visualize.py
 
-    sampler = make_random_weight_sampler(dataset, train_set)    # From preprocessing.py
+    '''
+    Data Preprocessing
+    '''
+    if (handle_imbalances): ### Part 2: Data Augmentation and Weighted Random Sampler
+        # Augment training data and add into train_loader
+        train_aug_1 = MapDataset(train_set, standard_transform)
+        train_aug_2 = MapDataset(train_set, data_jitter_transform)
+        train_aug_3 = MapDataset(train_set, data_jitter_saturation)
+        train_aug_4 = MapDataset(train_set, flip_transform)
 
+        print(f"Augmentations performed: {standard_transform} {data_jitter_transform} {data_jitter_saturation} {flip_transform}")
+        concat_train_set = torch.utils.data.ConcatDataset([train_aug_1, train_aug_2, train_aug_3, train_aug_4])
+        
+        sampler = make_weighted_random_sampler(dataset, train_set)    # From preprocessing.py
 
-    ### Load data into DataLoaders
-    train_loader = torch.utils.data.DataLoader(train_set, 
+        train_loader = torch.utils.data.DataLoader(concat_train_set, 
+                                                batch_size = batch_size,
+                                                sampler = sampler,
+                                                num_workers = 2,
+                                                drop_last = True,
+                                                )
+    
+    else: ### Part 1: Standard pre-processing
+        train_aug = MapDataset(train_set, standard_transform)
+        print(f'Augmentations performed: {standard_transform}')
+
+        train_loader = torch.utils.data.DataLoader(train_aug, 
+                                                batch_size = batch_size,
+                                                num_workers = 2,
+                                                drop_last = True,
+                                                shuffle = True
+                                                )
+
+    ### Standard augmentation and loading for Validation and Test sets
+    valid_aug = MapDataset(valid_set, standard_transform)
+    test_aug = MapDataset(test_set, standard_transform)
+
+    valid_loader = torch.utils.data.DataLoader(valid_aug, 
                                                batch_size = batch_size,
-                                               sampler = sampler,
                                                num_workers = 2,
                                                drop_last = True,
-                                              )
+                                               shuffle = True
+                                             )
 
-    test_loader = torch.utils.data.DataLoader(test_set, 
+    test_loader = torch.utils.data.DataLoader(test_aug, 
                                               batch_size = batch_size,
                                               num_workers = 2,
                                               drop_last = True,
                                               shuffle = True
                                              )
 
-    ### Instantiate Model and prepare for training
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
-
-    model = Net()
+    '''
+    Instantiate Model
+    '''
+    model = Net()   # imported from basic_cnn.py
     print(model)
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(),
-                          lr=0.001,
-                          momentum=0.9)
-    
-    loss_plot = []
-    t1 = time.perf_counter()
+    '''
+    Training Procedures
+    '''
+    if (train): # Configured through config.yaml
+        print("Defining Loss function and Optimizer")
+        ### Define Model's loss function and optimizer
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.SGD(model.parameters(),
+                              lr=learning_rate,     # Defined in config.yaml
+                              momentum=momentum)    # Defined in config.yaml
+        
+        ### Define Lists for visualizations
+        train_loss_plot = []
+        train_acc_plot = []
+        valid_loss_plot = []
+        valid_acc_plot = []
+        print("Begin Training")
+        t1 = time.perf_counter()
+        for epoch in range(n_epoch):
+            print("Training round ", epoch + 1)
 
-    for epoch in range(4):
-        print("training round ", epoch)
+            train_loss = 0.0
+            train_correct = 0
+            train_total = 0
 
-        running_loss = 0.0
-        correct = 0
-        total = 0
+            for i, data in enumerate(train_loader, 0):
+                inputs, labels = data
+                input, labels = inputs.to(device), labels.to(device)
 
-        for i, data in enumerate(train_loader, 0):
-            inputs, labels = data
-            input, labels = inputs.to(device), labels.to(device)
+                optimizer.zero_grad()
 
-            optimizer.zero_grad()
+                outputs = model(inputs)
 
-            outputs = model(inputs)
+                _, predicted = torch.max(outputs.data, 1)
 
-            _, predicted = torch.max(outputs.data, 1)
-            loss = criterion(outputs, labels)
-            loss_plot.append(loss)
+                loss = criterion(outputs, labels)
 
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-            loss.backward()
-            optimizer.step()
+                train_total += labels.size(0)
+                train_correct += (predicted == labels).sum().item()
+                loss.backward()
+                optimizer.step()
 
-            running_loss += loss.item()
+                train_loss += loss.item()
 
-            if i % 200 == 199:
-                print('[%d, %5d] loss: %.3f accuracy: %.3f' %
-                  (epoch + 1, i + 1, running_loss / 200,100 * correct / total ))
+            valid_loss = 0.0
+            valid_correct = 0
+            valid_total = 0
+            model.eval()
+            for i, data in enumerate(valid_loader, 0):
+                inputs, labels = data
+                inputs, labels = inputs.to(device), labels.to(device)
 
-                running_loss = 0.0
-    t2 = time.perf_counter()
+                outputs = model(inputs)
 
-    print(f"Finished Training in {int(t2 - t1)} seconds")
+                _, predicted = torch.max(outputs.data, 1)
 
-    torch.save(model.state_dict(), PATH)
+                loss = criterion(outputs, labels)
 
-    ### Inference/Testing
-    print("begin inferencing")
-    model.load_state_dict(torch.load(PATH))
+                valid_total += labels.size(0)
+                valid_correct += (predicted == labels).sum().item()
 
-    correct = 0
-    total = 0
+                valid_loss += loss.item()
 
-    n_classes = 43
-    confusion_matrix = torch.zeros(n_classes, n_classes)
+            print(f'Epoch {epoch + 1} \t Training Loss: {(train_loss / len(train_loader)):.4f} \
+                                Training Acc: {(train_correct / train_total):.4f} \
+                                Validation Loss: {(valid_loss / len(valid_loader)):.4f} \
+                                Validation Acc: {(valid_correct / valid_total):.4f}')
 
-    with torch.no_grad():
-        for index, data in enumerate(test_loader):
-            images, labels = data
-            
-            outputs = model(images)
+            train_loss_plot.append(round(train_loss / len(train_loader), 4))
+            train_acc_plot.append(round(train_correct / train_total, 4))
+            valid_loss_plot.append(round(valid_loss / len(valid_loader), 4))
+            valid_acc_plot.append(round(valid_correct / valid_total, 4))
 
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+        t2 = time.perf_counter()
 
-            for t, p in zip(labels.view(-1), predicted.view(-1)):
-                confusion_matrix[t.long(), p.long()] += 1
-    
-    print(f'Accuracy of the network on the 10000 test images: {100 * correct // total} %')
+        print(f"Finished Training in {int(t2 - t1)} seconds")
 
-    save_confusion_matrix(confusion_matrix)
+        torch.save(model.state_dict(), save_path)
 
+        epoch_count = range(1, n_epoch + 1)
 
-    # print('Finished Training')
-    # plt.plot(range(len(loss_plot)),loss_plot, 'r+')
-    # plt.title("Loss")
-    # plt.show()
+        if (handle_imbalances):
+            plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Enhanced", 'Accuracy')
+            plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Enhanced", 'Loss')
+        else:
+            plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Basic", 'Accuracy')
+            plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Basic", 'Loss')
 
-    # print(net)
-    # https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
-    # https://github.com/gautam-sharma1/GTSRB-torch/blob/master/main.py
+    '''
+    Inferencing
+    '''
+    if (inference and PATH):
+        print("Begin Inferencing")
+        model.load_state_dict(torch.load(PATH))
 
-    # figure = plt.figure(figsize=(8, 8))
-    # cols, rows = 5, 5
+        test_correct = 0
+        test_total = 0
 
-    # for i in range(1, cols * rows + 1):
-    #     sample_idx = torch.randint(len(train_loader), size= (1,)).item()
-    #     img, label = dataset[sample_idx]
-    #     figure.add_subplot(rows, cols, i)
-    #     plt.title(label)
-    #     plt.axis('off')
-    #     plt.imshow(img, cmap="gray")
-    # plt.show()
+        n_classes = 43
+        confusion_matrix = torch.zeros(n_classes, n_classes)
+
+        with torch.no_grad():
+            for index, data in enumerate(test_loader):
+                images, labels = data
+                
+                outputs = model(images)
+
+                _, predicted = torch.max(outputs.data, 1)
+                test_total += labels.size(0)
+                test_correct += (predicted == labels).sum().item()
+
+                for t, p in zip(labels.view(-1), predicted.view(-1)):
+                    confusion_matrix[t.long(), p.long()] += 1
+        
+        print(f'Accuracy of the network on the {test_total} test images: {100 * test_correct // test_total} %')
+
+        if (handle_imbalances):
+            save_confusion_matrix(confusion_matrix, 'Enhanced')
+        else: 
+            save_confusion_matrix(confusion_matrix, 'Basic')
+
+    print("End Script")
+

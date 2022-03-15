@@ -1,0 +1,11 @@
+training: False
+inference: True
+imbalances: True
+dataset_path: './data/Final_Training/Images'
+save_path: './saved_models/enhanced_weights_colab.pth'
+weight_path: './saved_models/enhanced_weights_colab.pth'
+train_allocation: 0.8
+epoch: 2
+batch_size: 32
+learning_rate: 0.001
+momentum: 0.9

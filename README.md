@@ -16,7 +16,7 @@ pipenv shell
 
 All dependencies should be install with Python 3.9.
 
-**Data**
+**Data** <br>
 GTSRB dataset was downloaded from https://sid.erda.dk/public/archives/daaeac0d7ce1152aea9b61d9f1e19370/published-archive.html, under GTSRB_Final_Training_Images.zip. The directory structure below will guide how the script expects the data to be organized.
 
 # Usage

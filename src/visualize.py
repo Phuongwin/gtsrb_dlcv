@@ -34,7 +34,6 @@ def plot_train_validation(count, train_plot, valid_plot, name, save_name):
     plt.savefig(f'visualizations/{save_name}.png', dpi=300)
 
 def save_confusion_matrix(cf):
-    
     normalized_cf = cf / torch.sum(cf)
 
     cf_heatmap = sns.heatmap(normalized_cf, annot=True, fmt='.1%', cmap="Blues")

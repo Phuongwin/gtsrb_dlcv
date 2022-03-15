@@ -16,37 +16,6 @@ pipenv shell
 
 All dependencies should be install with Python 3.9.
 
-# Directory Structure
-```
-GTSRB_DLCV
-|─── data
-|       Final_Training
-|           00000
-|           00001
-|           ...
-|       Readme-Images.txt
-|─── notebooks
-|       
-|
-|─── saved_models
-|       custom_network.pth
-|─── src
-|       models
-|           basic_cnn.py
-|       main.py
-|       model.py
-|       preprocessing.py
-|       transform.py
-|       visualize.py
-|       visualizations
-|           confusion_matrix_GTSRB.png
-|           data_distribution.png
-|           train_valid_acc_plot.png
-|           train_valid_loss_plot.png
-|─── Pipfile
-|─── Pipfile.lock
-|─── README.md
-```
 # Usage
 Configuring experiments have been simplified through the usage of a config.yaml file. Opening the file introduces multiple configuration parameters and hyperparameters to determine how to run the training and inferening script. Below each parameter is defined with default values associated.
 
@@ -80,7 +49,47 @@ momentum (Float: 0.9)
     - Define momentum factor that contributes towards a gekoubg accelerating gradient vectors.
 ```
 
-Once Configurations and hyperparameters are desired values, run the script from the root directory of the repository as such:
+Once configurations and hyperparameters are desired values, run the script from the root directory of the repository as such:
 ```
 python ./src/main.py
 ```
+
+# Directory Structure
+```
+GTSRB_DLCV
+|─── data
+|       Final_Training
+|           00000
+|           00001
+|           ...
+|       signnames.csv
+|─── notebooks
+|       gtsrb_baseline.ipynb
+|       gtsrb_enhanced.ipynb
+|─── saved_models
+|       basic_weights_colab_gpu.pth
+|       basic_weights_local_cpu.pth
+|       enhanced_weights_colab_gpu.pth
+|       enhanced_weights_local_cpu.pth
+|─── src
+|       models
+|           basic_cnn.py
+|       main.py
+|       model.py
+|       preprocessing.py
+|       transform.py
+|       visualize.py
+|─── visualizations
+|       basic_accuracy.png
+|       basic_confusion_matrix_GTSRB.png
+|       basic_loss.png
+|       data_distribution.png
+|       enhanced_accuracy.png
+|       enhanced_confusion_matrix_GTSRB.png
+|       enhanced_loss.png
+|─── Pipfile
+|─── Pipfile.lock
+|─── README.md
+```
+
+**Note:** Weights provide have been trained via Google Colab on the GPU or locally on the CPU. The author of this repository lacks a local GPU to use, hence depended on Google Colab for much of the experiment. All visualizations were produced using this repository using only 2 epochs.

@@ -1,7 +1,6 @@
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 nclasses = 43
 
 class Net(nn.Module):
@@ -21,37 +20,14 @@ class Net(nn.Module):
         self.fc1_bn   = nn.BatchNorm2d(350)
 
         self.fc2      = nn.Linear(350, nclasses)
-        # self.dropout  = nn.Dropout(p=0.5)
 
     def forward(self, x):
-        '''
-        Layer 1
-        '''
         x = self.pool(F.elu(self.conv1(x)))
-        # x = self.dropout(self.conv1_bn(x))
-        
-        '''
-        Layer 2
-        '''
         x = self.pool(F.elu(self.conv2(x)))
-        # x = self.dropout(self.conv2_bn(x))
-        
-        '''
-        Layer 3
-        '''        
         x = self.pool(F.elu(self.conv3(x)))
-        # x = self.dropout(self.conv3_bn(x))
-
-        '''
-        Layer 4
-        '''        
+        
         x = x.view(-1, 250 * 3 * 3)
         x = F.elu(self.fc1(x))
-
-        '''
-        Layer 5
-        '''        
-        # x = self.dropout(self.fc1_bn(x))
         x = self.fc2(x)
 
         return x

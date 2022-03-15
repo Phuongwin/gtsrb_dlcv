@@ -4,6 +4,12 @@ from collections import Counter
 import numpy as np
 
 def split_dataset(dataset: torchvision.datasets.folder.ImageFolder, train_percentage: float = 0.8):
+    '''
+    Splitting into the dataset into train, validation, and test sets. The function takes train percentage
+    and splits remainder equally between validation and testing. Performs a subtraction between validation
+    and testing to reduce risk of splits not adding up.
+    '''
+    
     if train_percentage > 1.0:
         raise Exception("Inputted Train Percentage is too large")
     
@@ -15,7 +21,6 @@ def split_dataset(dataset: torchvision.datasets.folder.ImageFolder, train_percen
     valid_count = int(valid_test_count * 0.5)
     test_count = valid_test_count - valid_count
 
-
     train_set, valid_set, test_set = torch.utils.data.random_split(dataset, [train_count, valid_count, test_count])
     
     print(f'Train Set: {train_set.__len__()}')
@@ -26,10 +31,10 @@ def split_dataset(dataset: torchvision.datasets.folder.ImageFolder, train_percen
     return train_set, valid_set, test_set
 
 def make_weighted_random_sampler(dataset: torchvision.datasets.folder.ImageFolder, train_set: torch.utils.data.dataset.Subset):
-    #https://cs230.stanford.edu/projects_fall_2020/reports/55824835.pdf 
-    # Potential Approach is to use WeightedRandomSample
-    #https://towardsdatascience.com/getting-started-with-albumentation-winning-deep-learning-image-augmentation-technique-in-pytorch-47aaba0ee3f8
-    
+    '''
+    Specifically made for training set to mitigate class imbalances by sampling weights based on the number
+    of examples in the classes.
+    '''
     y_train_indices = train_set.indices
     y_train = [dataset.targets[i] for i in y_train_indices]
 

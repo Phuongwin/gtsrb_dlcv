@@ -11,7 +11,7 @@ from torchvision import datasets, transforms
 from preprocessing import *
 from visualize import *
 from models.basic_cnn import Net
-
+from transform import *
 if __name__ == "__main__":
     ### Read Configuration and Hyperparameters from config.yaml
     with open('./config.yaml') as file:
@@ -38,67 +38,74 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    if (handle_imbalances): ### More transformation for Part 2
-        print("Perform Data Augmentation")
-        transform = transforms.Compose([transforms.Resize((32, 32)),
-                                        transforms.RandomHorizontalFlip(),
-                                        transforms.ToTensor(),
-                                        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                            std=[0.229, 0.224, 0.225])
-                                    ])
-    else: ### Baseline Transformation for Part 1
-        print("Baseline transformation")
-        transform = transforms.Compose([transforms.Resize((32, 32)),
-                                        transforms.ToTensor(),
-                                        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                            std=[0.229, 0.224, 0.225])
-                                    ])
-
-    ### Loading the GTSRB dataset
-    dataset = datasets.ImageFolder(dataset_root, transform = transform)   # From preprocessing.py
-
-    train_set, valid_set, test_set = split_dataset(dataset, train_set_allocation)
+    '''
+    Loading the GTSRB dataset
+    '''
+    dataset = datasets.ImageFolder(dataset_root)   
+    train_set, valid_set, test_set = split_dataset(dataset, train_set_allocation) # From preprocessing.py
 
     view_data_distribution(dataset, "data_distribution")     # From visualize.py
 
-    ### Load data into DataLoaders
-    if (handle_imbalances): ### Use Weighted Random Sampler to handle class imbalances - Part 2
+    '''
+    Data Preprocessing
+    '''
+    if (handle_imbalances): ### Part 2: Data Augmentation and Weighted Random Sampler
+        # Augment training data and add into train_loader
+        train_aug_1 = MapDataset(train_set, standard_transform)
+        train_aug_2 = MapDataset(train_set, data_jitter_transform)
+        train_aug_3 = MapDataset(train_set, data_jitter_saturation)
+        train_aug_4 = MapDataset(train_set, flip_transform)
+
+        print(f"Augmentations performed: {standard_transform} {data_jitter_transform} {data_jitter_saturation} {flip_transform}")
+        concat_train_set = torch.utils.data.ConcatDataset([train_aug_1, train_aug_2, train_aug_3, train_aug_4])
+        
         sampler = make_weighted_random_sampler(dataset, train_set)    # From preprocessing.py
 
-        train_loader = torch.utils.data.DataLoader(train_set, 
+        train_loader = torch.utils.data.DataLoader(concat_train_set, 
                                                 batch_size = batch_size,
                                                 sampler = sampler,
                                                 num_workers = 2,
                                                 drop_last = True,
                                                 )
     
-    else: ### Generic DataLoader - Part 1
-        train_loader = torch.utils.data.DataLoader(train_set, 
+    else: ### Part 1: Standard pre-processing
+        train_aug = MapDataset(train_set, standard_transform)
+        print(f'Augmentations performed: {standard_transform}')
+
+        train_loader = torch.utils.data.DataLoader(train_aug, 
                                                 batch_size = batch_size,
                                                 num_workers = 2,
                                                 drop_last = True,
                                                 shuffle = True
                                                 )
 
-    ### valid loader and test loader remain identical
-    valid_loader = torch.utils.data.DataLoader(valid_set, 
+    ### Standard augmentation and loading for Validation and Test sets
+    valid_aug = MapDataset(valid_set, standard_transform)
+    test_aug = MapDataset(test_set, standard_transform)
+
+    valid_loader = torch.utils.data.DataLoader(valid_aug, 
                                                batch_size = batch_size,
                                                num_workers = 2,
                                                drop_last = True,
                                                shuffle = True
                                              )
 
-    test_loader = torch.utils.data.DataLoader(test_set, 
+    test_loader = torch.utils.data.DataLoader(test_aug, 
                                               batch_size = batch_size,
                                               num_workers = 2,
                                               drop_last = True,
                                               shuffle = True
                                              )
 
-    ### Instantiate Model and prepare for training
+    '''
+    Instantiate Model
+    '''
     model = Net()   # imported from basic_cnn.py
     print(model)
 
+    '''
+    Training Procedures
+    '''
     if (train): # Configured through config.yaml
         print("Defining Loss function and Optimizer")
         ### Define Model's loss function and optimizer
@@ -176,10 +183,17 @@ if __name__ == "__main__":
         torch.save(model.state_dict(), save_path)
 
         epoch_count = range(1, n_epoch + 1)
-        plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Accuracy", 'train_valid_acc_plot')
-        plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Loss", 'train_valid_loss_plot')
 
-    # ### Inference/Testing
+        if (handle_imbalances):
+            plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Enhanced", 'Accuracy')
+            plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Enhanced", 'Loss')
+        else:
+            plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Basic", 'Accuracy')
+            plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Basic", 'Loss')
+
+    '''
+    Inferencing
+    '''
     if (inference and PATH):
         print("Begin Inferencing")
         model.load_state_dict(torch.load(PATH))
@@ -205,5 +219,10 @@ if __name__ == "__main__":
         
         print(f'Accuracy of the network on the {test_total} test images: {100 * test_correct // test_total} %')
 
-        save_confusion_matrix(confusion_matrix)
+        if (handle_imbalances):
+            save_confusion_matrix(confusion_matrix, 'Enhanced')
+        else: 
+            save_confusion_matrix(confusion_matrix, 'Basic')
+
+    print("End Script")
 

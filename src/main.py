@@ -15,21 +15,25 @@ from preprocessing import *
 from visualize import *
 from models.basic_cnn import Net
 
-def split_dataset(dataset: torchvision.datasets.folder.ImageFolder, train_percentage: float):
+def split_dataset(dataset: torchvision.datasets.folder.ImageFolder, train_percentage: float = 0.8):
     if train_percentage > 1.0:
-        raise Exception("Sizes do not equate to 1.0")
+        raise Exception("Inputted Train Percentage is too large")
     
     dataset_size = dataset.__len__()
 
     train_count = int(dataset_size * train_percentage)
-    test_count = dataset_size - train_count
+    valid_test_count = dataset_size - train_count
+
+    valid_count = int(valid_test_count * 0.5)
+    test_count = int(valid_test_count * 0.5)
 
 
-    train_set, test_set = torch.utils.data.random_split(dataset, [train_count, test_count])
-    print(train_set.__len__(), test_set.__len__())
-    print(f"Confirming total: {train_set.__len__() + test_set.__len__()}")
+    train_set, valid_set, test_set = torch.utils.data.random_split(dataset, [train_count, valid_count, test_count])
+    
+    print(train_set.__len__(), valid_set.__len__(), test_set.__len__())
+    print(f"Confirming total: {train_set.__len__() + valid_set.__len__() + test_set.__len__()}")
 
-    return train_set, test_set
+    return train_set, valid_set, test_set
 
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser(description='GTSRB Classification - JHU DL for CV')
@@ -39,7 +43,8 @@ if __name__ == "__main__":
     
     ### Define Hyperparameters to be used within command line arguments
     batch_size = 32
-    train_set_allocation = 0.9
+    train_set_allocation = 0.8
+    n_epoch = 2
 
     PATH = './saved_models/custom_network.pth'
 
@@ -53,7 +58,7 @@ if __name__ == "__main__":
     ### Loading the GTSRB dataset
     dataset = datasets.ImageFolder('./data/Final_Training/Images', transform = transform)
 
-    train_set, test_set = split_dataset(dataset, train_set_allocation)
+    train_set, valid_set, test_set = split_dataset(dataset, train_set_allocation)
 
     view_data_distribution(dataset, "data_distribution")     # From visualize.py
 
@@ -67,6 +72,13 @@ if __name__ == "__main__":
                                                num_workers = 2,
                                                drop_last = True,
                                               )
+
+    valid_loader = torch.utils.data.DataLoader(valid_set, 
+                                               batch_size = batch_size,
+                                               num_workers = 2,
+                                               drop_last = True,
+                                               shuffle = True
+                                             )
 
     test_loader = torch.utils.data.DataLoader(test_set, 
                                               batch_size = batch_size,
@@ -87,15 +99,19 @@ if __name__ == "__main__":
                           lr=0.001,
                           momentum=0.9)
     
-    loss_plot = []
+    ### Define Lists for visualizations
+    train_loss_plot = []
+    train_acc_plot = []
+    valid_loss_plot = []
+    valid_acc_plot = []
+
     t1 = time.perf_counter()
+    for epoch in range(n_epoch):
+        print("Training round ", epoch)
 
-    for epoch in range(4):
-        print("training round ", epoch)
-
-        running_loss = 0.0
-        correct = 0
-        total = 0
+        train_loss = 0.0
+        train_correct = 0
+        train_total = 0
 
         for i, data in enumerate(train_loader, 0):
             inputs, labels = data
@@ -106,33 +122,61 @@ if __name__ == "__main__":
             outputs = model(inputs)
 
             _, predicted = torch.max(outputs.data, 1)
-            loss = criterion(outputs, labels)
-            loss_plot.append(loss)
 
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            loss = criterion(outputs, labels)
+
+            train_total += labels.size(0)
+            train_correct += (predicted == labels).sum().item()
             loss.backward()
             optimizer.step()
 
-            running_loss += loss.item()
+            train_loss += loss.item()
 
-            if i % 200 == 199:
-                print('[%d, %5d] loss: %.3f accuracy: %.3f' %
-                  (epoch + 1, i + 1, running_loss / 200,100 * correct / total ))
+        valid_loss = 0.0
+        valid_correct = 0
+        valid_total = 0
+        model.eval()
+        for i, data in enumerate(valid_loader, 0):
+            inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
 
-                running_loss = 0.0
+            outputs = model(inputs)
+
+            _, predicted = torch.max(outputs.data, 1)
+
+            loss = criterion(outputs, labels)
+
+            valid_total += labels.size(0)
+            valid_correct += (predicted == labels).sum().item()
+
+            valid_loss += loss.item()
+
+        print(f'Epoch {epoch + 1} \t Training Loss: {(train_loss / len(train_loader)):.4f} \
+                               Training Acc: {(train_correct / train_total):.4f} \
+                               Validation Loss: {(valid_loss / len(valid_loader)):.4f} \
+                               Validation Acc: {(valid_correct / valid_total):.4f}')
+
+        train_loss_plot.append(round(train_loss / len(train_loader), 4))
+        train_acc_plot.append(round(train_correct / train_total, 4))
+        valid_loss_plot.append(round(valid_loss / len(valid_loader), 4))
+        valid_acc_plot.append(round(valid_correct / valid_total, 4))
+
     t2 = time.perf_counter()
 
     print(f"Finished Training in {int(t2 - t1)} seconds")
 
     torch.save(model.state_dict(), PATH)
 
+    epoch_count = range(1, n_epoch + 1)
+    plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Accuracy", 'train_valid_acc_plot')
+    plot_train_validation(epoch_count, train_acc_plot, valid_acc_plot, "Loss", 'train_valid_loss_plot')
+
     ### Inference/Testing
     print("begin inferencing")
     model.load_state_dict(torch.load(PATH))
 
-    correct = 0
-    total = 0
+    test_correct = 0
+    test_total = 0
 
     n_classes = 43
     confusion_matrix = torch.zeros(n_classes, n_classes)
@@ -144,34 +188,13 @@ if __name__ == "__main__":
             outputs = model(images)
 
             _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            test_total += labels.size(0)
+            test_correct += (predicted == labels).sum().item()
 
             for t, p in zip(labels.view(-1), predicted.view(-1)):
                 confusion_matrix[t.long(), p.long()] += 1
     
-    print(f'Accuracy of the network on the 10000 test images: {100 * correct // total} %')
+    print(f'Accuracy of the network on the {test_total} test images: {100 * test_correct // test_total} %')
 
     save_confusion_matrix(confusion_matrix)
 
-
-    # print('Finished Training')
-    # plt.plot(range(len(loss_plot)),loss_plot, 'r+')
-    # plt.title("Loss")
-    # plt.show()
-
-    # print(net)
-    # https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
-    # https://github.com/gautam-sharma1/GTSRB-torch/blob/master/main.py
-
-    # figure = plt.figure(figsize=(8, 8))
-    # cols, rows = 5, 5
-
-    # for i in range(1, cols * rows + 1):
-    #     sample_idx = torch.randint(len(train_loader), size= (1,)).item()
-    #     img, label = dataset[sample_idx]
-    #     figure.add_subplot(rows, cols, i)
-    #     plt.title(label)
-    #     plt.axis('off')
-    #     plt.imshow(img, cmap="gray")
-    # plt.show()

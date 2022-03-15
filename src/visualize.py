@@ -10,12 +10,28 @@ def view_data_distribution(dataset, name: str):
     keys = list(distribution.keys())
     values = list(distribution.values())
 
+    fig, ax = plt.subplots()
+    fig.set_size_inches(18.5, 10.5)
+    ax.set_title("GTSRB Data Imbalances")
+    ax.set_xlabel('Example count (int)')
+    ax.set_ylabel('Class (int)')
+
     plt.barh(keys, values)
 
     for index, value in enumerate(values):
         plt.text(value, index, str(value))
 
     plt.savefig(f'visualizations/{name}.png')
+
+def plot_train_validation(count, train_plot, valid_plot, name, save_name):
+    plt.figure(figsize=(10,10))
+    plt.plot(count, train_plot)
+    plt.plot(count, valid_plot)
+    plt.xlabel('Epochs')
+    plt.ylabel(f'{name}')
+    # plt.title(f'Imbalanced Handled CNN Training/Validation {name}')
+
+    plt.savefig(f'visualizations/{save_name}.png', dpi=300)
 
 def save_confusion_matrix(cf):
     

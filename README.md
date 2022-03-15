@@ -1,5 +1,20 @@
+# GTSRB Image Classification
+Purpose: Perform Image classification on GTSRB dataset using a Convolutional Neural Network. Configure two separate experiments, first a baseline CNN preprocessing and training procedure and second an enhanced CNN preprocessing and training procedure that mitigates class imbalances through the usage of data augmentation and class imbalance mitigation.
+
+This repository satisfies the requirements of the midterm project for the course 525.733 Deep Learning for Computer Vision at Johns Hopkins University. 
+
 # Building
-This repository uses a pipenv as a virtual environment to run the source code. 
+This repository uses a pipenv as a virtual environment to run the source code. To create the environment, perform the following:
+```
+cd gtsrb_dlcv
+pipenv install
+```
+A Pipfile.lock file should appear which signifies the creation of the environment. To activate the environment, run the following:
+```
+pipenv shell
+```
+
+All dependencies should be install with Python 3.9.
 
 # Directory Structure
 ```
@@ -69,4 +84,3 @@ Once Configurations and hyperparameters are desired values, run the script from 
 ```
 python ./src/main.py
 ```
-
